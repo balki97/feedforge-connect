@@ -1,0 +1,15 @@
+{
+  "id": "feedforge_connect",
+  "name": "FeedForge Connect",
+  "version": "0.4.0",
+  "description": "Links FeedBack to FeedForge Hub and submits eligible Note Detect scores.",
+  "private": false,
+  "minHost": "0.3.0",
+  "script": "screen.js",
+  "settings": {
+    "html": "settings.html",
+    "category": "general",
+    "server_files": ["feedforge_connect.json", "feedforge_connect_queue.json"]
+  },
+  "routes": "routes.py"
+}

@@ -1,0 +1,65 @@
+<div class="feedforge-connect-settings">
+  <style>
+    .feedforge-connect-settings { display:grid; gap:12px; max-width:620px; }
+    .feedforge-connect-settings .ff-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .feedforge-connect-settings code { font-size:1.15em; letter-spacing:.08em; }
+    .feedforge-connect-settings .ff-error { color:#f87171; }
+    .feedforge-connect-settings .ff-ok { color:#4ade80; }
+  </style>
+  <h3>FeedForge Connect</h3>
+  <p>Link your FeedForge Hub account to submit eligible Note Detect scores. After each run, FeedForge Connect shows the result and asks before uploading it. Ranked runs require the published FeedPak, 100% difficulty and speed, standard detection settings, and uninterrupted playback.</p>
+  <div class="ff-row"><strong data-status>Checking connection…</strong><span data-queue></span></div>
+  <div class="ff-row"><button type="button" data-connect>Connect account</button><button type="button" data-disconnect>Disconnect</button></div>
+  <p data-code hidden>Enter code <code></code> in the browser window.</p>
+  <p class="ff-error" data-error></p>
+  <script>
+    (() => {
+      const root = document.currentScript.closest('.feedforge-connect-settings');
+      const status = root.querySelector('[data-status]');
+      const queue = root.querySelector('[data-queue]');
+      const error = root.querySelector('[data-error]');
+      const code = root.querySelector('[data-code]');
+      const connect = root.querySelector('[data-connect]');
+      const disconnect = root.querySelector('[data-disconnect]');
+      let timer = null;
+
+      async function request(path, options) {
+        const response = await fetch('/api/plugins/feedforge_connect/' + path, options);
+        const body = await response.json();
+        if (!response.ok && response.status !== 428) throw new Error(body.errorDescription || body.error || 'Request failed.');
+        return { response, body };
+      }
+      async function refresh() {
+        try {
+          const { body } = await request('status');
+          status.textContent = body.connected ? 'Connected to FeedForge Hub' : 'Not connected';
+          status.className = body.connected ? 'ff-ok' : '';
+          queue.textContent = body.queued ? `${body.queued} score(s) waiting to retry` : '';
+          disconnect.hidden = !body.connected;
+          connect.hidden = body.connected;
+        } catch (e) { error.textContent = e.message; }
+      }
+      async function poll(interval) {
+        try {
+          const { response } = await request('poll', { method:'POST' });
+          if (response.status === 428) { timer = setTimeout(() => poll(interval), interval * 1000); return; }
+          code.hidden = true; await refresh();
+        } catch (e) { error.textContent = e.message; }
+      }
+      connect.addEventListener('click', async () => {
+        error.textContent = '';
+        try {
+          const { body } = await request('begin', { method:'POST' });
+          code.hidden = false; code.querySelector('code').textContent = body.userCode;
+          window.open(body.verificationUriComplete, '_blank', 'noopener');
+          poll(body.interval || 5);
+        } catch (e) { error.textContent = e.message; }
+      });
+      disconnect.addEventListener('click', async () => {
+        if (!confirm('Disconnect FeedForge Hub from this FeedBack installation?')) return;
+        clearTimeout(timer); await request('disconnect', { method:'POST' }); await refresh();
+      });
+      refresh();
+    })();
+  </script>
+</div>
