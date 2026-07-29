@@ -34,6 +34,7 @@ class FeedPakPathTests(unittest.TestCase):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
         self.assertIn("holdAutoplay", source)
         self.assertIn("data-start-ranked", source)
+        self.assertIn("settingsEqual(d.settings, rankedSettings)", source)
         self.assertLess(source.index("/run/start"), source.index("on('song:play'"))
 
     def test_ranked_run_locks_player_controls(self):

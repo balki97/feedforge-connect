@@ -14,6 +14,11 @@
         'chord_timing_hit_threshold_s', 'pitch_tolerance_cents',
         'pitch_hit_threshold_cents', 'chord_hit_ratio', 'detection_confidence_min',
     ];
+    const rankedSettings = {
+        method: 'yin', timing_tolerance_s: 0.15, timing_hit_threshold_s: 0.1,
+        chord_timing_hit_threshold_s: 0.15, pitch_tolerance_cents: 50,
+        pitch_hit_threshold_cents: 20, chord_hit_ratio: 0.4, detection_confidence_min: 0.2,
+    };
 
     const detail = event => event && event.detail || event || {};
     const speed = () => Number(document.getElementById('speed-slider')?.value || 100) / 100;
@@ -216,6 +221,16 @@
         await Promise.resolve(window.feedBack?.seek?.(0, 'feedforge-ranked-start')).catch(() => {});
         const d = diagnostic();
         const c = chart();
+        if (d?.plugin_version !== '1.32.0') {
+            mode = 'choosing';
+            showSetupError('Ranked play requires Note Detection 1.32.0.');
+            return;
+        }
+        if (!settingsEqual(d.settings, rankedSettings)) {
+            mode = 'choosing';
+            showSetupError('Reset Note Detection to its default competitive settings before starting a ranked run.');
+            return;
+        }
         const challenge = await fetch('/api/plugins/feedforge_connect/run/start', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: song.filename, arrangementIndex }),
