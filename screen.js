@@ -68,7 +68,7 @@
                 .ff-result-actions button{min-height:42px;padding:0 18px;border-radius:9px;font:700 13px/1 Inter,Segoe UI,sans-serif;cursor:pointer}
                 .ff-result-local{border:1px solid #34455d;background:#121b2a;color:#c6d2e1}.ff-result-local:hover{background:#19263a}
                 .ff-result-upload{border:1px solid #69cfff;background:linear-gradient(135deg,#45bdf5,#6e8cff);color:#05111d;box-shadow:0 8px 24px rgba(64,174,239,.2)}.ff-result-upload:hover{filter:brightness(1.08)}
-                .ff-ranked-intro{margin:0 0 20px;color:#a8b7ca;font-size:14px;line-height:1.55}.ff-ranked-field{display:grid;gap:8px}.ff-ranked-field label{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8297b3}.ff-ranked-field select{width:100%;min-height:46px;padding:0 13px;border:1px solid #344b68;border-radius:9px;background:#0d1522;color:#f4f8ff;font:700 14px Inter,Segoe UI,sans-serif}.ff-ranked-hint{margin-top:18px;color:#7f91a9;font-size:12px;line-height:1.5}.ff-ranked-error{margin-top:18px;padding:12px 14px;border-left:3px solid #f26b7a;border-radius:8px;background:#24171b;color:#efbec6;font-size:13px}.ff-ranked-lock{position:fixed;inset:0;z-index:190;background:transparent;cursor:none}.ff-ranked-badge{position:fixed;z-index:191;top:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:10px 15px;border:1px solid #275675;border-radius:999px;background:rgba(7,15,25,.9);box-shadow:0 10px 34px rgba(0,0,0,.35);color:#dff5ff;font:800 11px/1 Inter,Segoe UI,sans-serif;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}.ff-ranked-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:#ff5f70;box-shadow:0 0 14px #ff5f70}body.ff-ranked-active #player-controls,body.ff-ranked-active #v3-railzone{opacity:0!important;pointer-events:none!important}
+                .ff-ranked-intro{margin:0 0 20px;color:#a8b7ca;font-size:14px;line-height:1.55}.ff-ranked-field{display:grid;gap:8px}.ff-ranked-field label{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8297b3}.ff-ranked-field select{width:100%;min-height:46px;padding:0 13px;border:1px solid #344b68;border-radius:9px;background:#0d1522;color:#f4f8ff;font:700 14px Inter,Segoe UI,sans-serif}.ff-ranked-hint{margin-top:18px;color:#7f91a9;font-size:12px;line-height:1.5}.ff-ranked-error{margin-top:18px;padding:12px 14px;border-left:3px solid #f26b7a;border-radius:8px;background:#24171b;color:#efbec6;font-size:13px}.ff-ranked-badge{position:fixed;z-index:191;top:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:10px 15px;border:1px solid #275675;border-radius:999px;background:rgba(7,15,25,.9);box-shadow:0 10px 34px rgba(0,0,0,.35);color:#dff5ff;font:800 11px/1 Inter,Segoe UI,sans-serif;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}.ff-ranked-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:#ff5f70;box-shadow:0 0 14px #ff5f70}body.ff-ranked-active #player-controls,body.ff-ranked-active #v3-railzone [data-rail="advanced"],body.ff-ranked-active #v3-rail-pop-advanced{opacity:.3!important;pointer-events:none!important}
                 @media(max-width:560px){.ff-result-hero{grid-template-columns:82px 1fr;gap:16px}.ff-result-grade{height:82px}.ff-result-grade strong{font-size:38px}.ff-result-score strong{font-size:34px}.ff-result-stats{grid-template-columns:repeat(2,1fr)}.ff-result-stat:nth-child(2){border-right:0}.ff-result-stat:nth-child(-n+2){border-bottom:1px solid rgba(117,151,190,.17)}}
             `;
             document.head.appendChild(style);
@@ -81,15 +81,11 @@
         document.querySelector('[data-feedforge-ranked-badge]')?.remove();
         if (!active) return;
         ensureStyles();
-        const lock = document.createElement('div');
-        lock.className = 'ff-ranked-lock';
-        lock.dataset.feedforgeRankedLock = '';
-        lock.setAttribute('aria-hidden', 'true');
         const badge = document.createElement('div');
         badge.className = 'ff-ranked-badge';
         badge.dataset.feedforgeRankedBadge = '';
         badge.textContent = `Ranked recording${arrangementName ? ` · ${arrangementName}` : ''}`;
-        document.body.append(lock, badge);
+        document.body.append(badge);
     };
 
     const releaseHeldAutoplay = () => {
@@ -365,7 +361,10 @@
         if (run && event.target?.id === 'speed-slider' && speed() !== run.playbackRate) run.settingsChanged = true;
     });
     document.addEventListener('keydown', event => {
-        if ((mode === 'armed' || mode === 'ranked') && event.key !== 'Escape') {
+        const target = event.target instanceof Element ? event.target : null;
+        const interactive = target?.matches('input,select,textarea,button') || target?.isContentEditable;
+        const unsafe = target?.closest('#player-controls,#v3-rail-pop-advanced');
+        if ((mode === 'armed' || mode === 'ranked') && event.key !== 'Escape' && (!interactive || unsafe)) {
             event.preventDefault();
             event.stopImmediatePropagation();
         }

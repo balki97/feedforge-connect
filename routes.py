@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 PLUGIN_ID = "feedforge_connect"
 DEFAULT_HUB_URL = "https://feedforge.org"
 MAX_QUEUE = 50
-PLUGIN_VERSION = "0.4.2"
+PLUGIN_VERSION = "0.4.3"
 
 
 class HubError(Exception):

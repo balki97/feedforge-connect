@@ -39,10 +39,13 @@ class FeedPakPathTests(unittest.TestCase):
         self.assertIn("Number(settings.detection_confidence_min) >= rankedSettings.detection_confidence_min", source)
         self.assertLess(source.index("/run/start"), source.index("on('song:play'"))
 
-    def test_ranked_run_locks_player_controls(self):
+    def test_ranked_run_locks_competitive_controls_only(self):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
-        self.assertIn("ff-ranked-lock", source)
         self.assertIn("body.ff-ranked-active #player-controls", source)
+        self.assertIn('body.ff-ranked-active #v3-railzone [data-rail="advanced"]', source)
+        self.assertNotIn("body.ff-ranked-active #v3-railzone{", source)
+        self.assertNotIn("lock.className = 'ff-ranked-lock'", source)
+        self.assertIn("target?.matches('input,select,textarea,button')", source)
         self.assertIn("setRankedLock(true", source)
 
     def test_arrangement_is_selected_before_ranked_play(self):
