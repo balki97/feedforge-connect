@@ -2,6 +2,8 @@
 
 FeedBack plugin for FeedForge Hub ranked and competitive play.
 
+Install through FeedBack's Plugin Manager with `https://github.com/balki97/feedforge-connect.git`. If Git is unavailable, download `FeedForge-Connect.zip` from the latest release, extract it to `%APPDATA%\feedback-desktop\plugins\feedforge-connect`, and restart FeedBack.
+
 It links a FeedForge Hub account, validates eligible charts, records ranked Note Detect runs, and lets players upload their results to the leaderboard.
 
 ## Install
