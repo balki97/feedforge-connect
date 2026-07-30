@@ -37,6 +37,11 @@
         catch (_) { return {}; }
     };
     const settingsEqual = (a, b) => relevantSettings.every(key => a?.[key] === b?.[key]);
+    const settingsCompetitive = settings => settings?.method === rankedSettings.method
+        && ['timing_tolerance_s', 'timing_hit_threshold_s', 'chord_timing_hit_threshold_s', 'pitch_tolerance_cents', 'pitch_hit_threshold_cents']
+            .every(key => Number(settings[key]) > 0 && Number(settings[key]) <= rankedSettings[key])
+        && Number(settings.chord_hit_ratio) >= rankedSettings.chord_hit_ratio && Number(settings.chord_hit_ratio) <= 1
+        && Number(settings.detection_confidence_min) >= rankedSettings.detection_confidence_min && Number(settings.detection_confidence_min) <= 1;
     const ensureStyles = () => {
         if (!document.getElementById('feedforge-result-style')) {
             const style = document.createElement('style');
@@ -226,9 +231,9 @@
             showSetupError('Ranked play requires Note Detection 1.32.0.');
             return;
         }
-        if (!settingsEqual(d.settings, rankedSettings)) {
+        if (!settingsCompetitive(d.settings)) {
             mode = 'choosing';
-            showSetupError('Reset Note Detection to its default competitive settings before starting a ranked run.');
+            showSetupError('Note Detection settings must stay within the competitive limits. Stricter tolerances are allowed.');
             return;
         }
         const challenge = await fetch('/api/plugins/feedforge_connect/run/start', {
