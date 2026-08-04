@@ -34,9 +34,12 @@ class FeedPakPathTests(unittest.TestCase):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
         self.assertIn("holdAutoplay", source)
         self.assertIn("data-start-ranked", source)
-        self.assertIn("settingsCompetitive(d.settings)", source)
-        self.assertIn("Number(settings[key]) <= rankedSettings[key]", source)
-        self.assertIn("Number(settings.detection_confidence_min) >= rankedSettings.detection_confidence_min", source)
+        self.assertIn("window.noteDetect?.enable?.()", source)
+        self.assertIn("Note Detection could not start", source)
+        self.assertIn("applyNoteDetectSettings(rankedSettings)", source)
+        self.assertIn("settingsEqual(d?.settings, rankedSettings)", source)
+        self.assertIn("restoreRankedSettings(finished)", source)
+        self.assertIn("settings: finished.settings || {}", source)
         self.assertLess(source.index("/run/start"), source.index("on('song:play'"))
 
     def test_ranked_run_locks_competitive_controls_only(self):

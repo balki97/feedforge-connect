@@ -37,11 +37,22 @@
         catch (_) { return {}; }
     };
     const settingsEqual = (a, b) => relevantSettings.every(key => a?.[key] === b?.[key]);
-    const settingsCompetitive = settings => settings?.method === rankedSettings.method
-        && ['timing_tolerance_s', 'timing_hit_threshold_s', 'chord_timing_hit_threshold_s', 'pitch_tolerance_cents', 'pitch_hit_threshold_cents']
-            .every(key => Number(settings[key]) > 0 && Number(settings[key]) <= rankedSettings[key])
-        && Number(settings.chord_hit_ratio) >= rankedSettings.chord_hit_ratio && Number(settings.chord_hit_ratio) <= 1
-        && Number(settings.detection_confidence_min) >= rankedSettings.detection_confidence_min && Number(settings.detection_confidence_min) <= 1;
+    const applyNoteDetectSettings = settings => window.noteDetect?.applySettings?.({
+        method: settings.method,
+        timingTolerance: settings.timing_tolerance_s,
+        timingHitThreshold: settings.timing_hit_threshold_s,
+        chordTimingHitThreshold: settings.chord_timing_hit_threshold_s,
+        pitchTolerance: settings.pitch_tolerance_cents,
+        pitchHitThreshold: settings.pitch_hit_threshold_cents,
+        chordHitRatio: settings.chord_hit_ratio,
+        detectionConfidenceMin: settings.detection_confidence_min,
+    });
+    const restoreRankedSettings = active => {
+        if (!active?.previousSettings || active.settingsRestored) return;
+        active.settingsChanged ||= !settingsEqual(active.settings, diagnostic()?.settings);
+        applyNoteDetectSettings(active.previousSettings);
+        active.settingsRestored = true;
+    };
     const ensureStyles = () => {
         if (!document.getElementById('feedforge-result-style')) {
             const style = document.createElement('style');
@@ -220,24 +231,39 @@
         }
         window.feedBack?.clearLoop?.({ reason: 'feedforge-ranked-start' });
         await Promise.resolve(window.feedBack?.seek?.(0, 'feedforge-ranked-start')).catch(() => {});
-        const d = diagnostic();
+        if (!window.noteDetect?.isEnabled?.()) {
+            await Promise.resolve(window.noteDetect?.enable?.()).catch(() => {});
+        }
+        if (!window.noteDetect?.isEnabled?.()) {
+            mode = 'choosing';
+            showSetupError('Note Detection could not start. Check its audio input, then try ranked play again.');
+            return;
+        }
+        let d = diagnostic();
         const c = chart();
         if (d?.plugin_version !== '1.32.0') {
             mode = 'choosing';
             showSetupError('Ranked play requires Note Detection 1.32.0.');
             return;
         }
-        if (!settingsCompetitive(d.settings)) {
+        const previousSettings = d.settings;
+        applyNoteDetectSettings(rankedSettings);
+        d = diagnostic();
+        if (!settingsEqual(d?.settings, rankedSettings)) {
             mode = 'choosing';
-            showSetupError('Note Detection settings must stay within the competitive limits. Stricter tolerances are allowed.');
+            showSetupError('Ranked play could not apply the competitive Note Detection profile. Update Note Detection and try again.');
             return;
         }
         const challenge = await fetch('/api/plugins/feedforge_connect/run/start', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: song.filename, arrangementIndex }),
         }).then(response => response.json()).catch(() => ({ ok: false, error: 'FeedForge Hub is unavailable.' }));
-        if (mode !== 'checking') return;
+        if (mode !== 'checking') {
+            applyNoteDetectSettings(previousSettings);
+            return;
+        }
         if (!challenge?.data?.runId) {
+            applyNoteDetectSettings(previousSettings);
             mode = 'choosing';
             showSetupError(challenge?.errorDescription || challenge?.error || 'This chart is not eligible for ranked play.');
             return;
@@ -245,6 +271,7 @@
         armedRun = {
             song: { ...song, arrangementIndex, arrangementSmartName: arrangementName },
             settings: d?.settings || null,
+            previousSettings,
             mastery: c.mastery == null ? null : Math.round(Number(c.mastery) * (Number(c.mastery) <= 1 ? 100 : 1)),
             hasPhraseData: Boolean(c.hasPhraseData),
             playbackRate: speed(),
@@ -276,7 +303,7 @@
                 <header class="ff-result-head"><div class="ff-result-kicker">FeedForge ranked</div><button class="ff-result-close" type="button" aria-label="Play normally">&times;</button></header>
                 <div class="ff-result-main">
                     <div class="ff-result-song" id="ff-ranked-title">Record a ranked score?</div>
-                    <p class="ff-ranked-intro">Choose the arrangement before playback. Ranked mode locks the player controls and records one uninterrupted run; you still choose whether to upload after seeing the result.</p>
+                    <p class="ff-ranked-intro">Choose the arrangement before playback. Ranked mode uses one consistent, forgiving detection profile, locks playback controls, and records one uninterrupted run. Your practice settings return afterward.</p>
                     <div class="ff-ranked-field"><label for="ff-ranked-arrangement">Arrangement</label><select id="ff-ranked-arrangement" data-arrangement></select></div>
                     <div class="ff-ranked-error" data-setup-error hidden></div>
                     <div class="ff-ranked-hint">Practice mode leaves every FeedBack control available.</div>
@@ -309,6 +336,7 @@
     };
 
     window.feedBack?.on('song:loading', () => {
+        restoreRankedSettings(run || armedRun);
         setupDialog?.remove();
         setupDialog = null;
         setRankedLock(false);
@@ -352,6 +380,7 @@
     window.feedBack?.on('song:ended', () => { if (run) run.naturalEnd = true; });
     window.feedBack?.on('song:stop', () => {
         if (run) run.naturalEnd = false;
+        restoreRankedSettings(run || armedRun);
         setRankedLock(false);
         releaseHeldAutoplay();
         mode = 'idle';
@@ -378,6 +407,7 @@
             mode = 'result';
             const result = detail(event);
             const d = diagnostic();
+            restoreRankedSettings(finished);
             const challenge = await finished.challenge;
             const arrangementName = finished.song.arrangementSmartName || result.arrangement || finished.song.arrangement || null;
             const accepted = await showResultDialog({ finished, result, arrangementName, challenge });
@@ -394,7 +424,7 @@
                 return;
             }
             finished.hadLoop ||= loopActive();
-            finished.settingsChanged ||= !settingsEqual(finished.settings, d?.settings) || speed() !== finished.playbackRate;
+            finished.settingsChanged ||= speed() !== finished.playbackRate;
             const payload = {
                 filename: finished.song.filename,
                 score: {
@@ -413,7 +443,7 @@
                     settingsChanged: finished.settingsChanged,
                     runDurationMs: Math.round(performance.now() - finished.startedAt),
                     noteDetectVersion: d?.plugin_version || 'unknown', feedbackVersion: null,
-                    playedAt: result.timestamp || new Date().toISOString(), settings: d?.settings || {},
+                    playedAt: result.timestamp || new Date().toISOString(), settings: finished.settings || {},
                 },
             };
             try {
