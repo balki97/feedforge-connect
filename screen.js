@@ -9,6 +9,7 @@
     let setupDialog = null;
     let songReady = false;
     let mode = 'idle';
+    const noteDetectUrl = 'https://github.com/got-feedback/feedBack-plugin-notedetect.git';
     const relevantSettings = [
         'method', 'timing_tolerance_s', 'timing_hit_threshold_s',
         'chord_timing_hit_threshold_s', 'pitch_tolerance_cents',
@@ -79,7 +80,7 @@
                 .ff-result-actions button{min-height:42px;padding:0 18px;border-radius:9px;font:700 13px/1 Inter,Segoe UI,sans-serif;cursor:pointer}
                 .ff-result-local{border:1px solid #34455d;background:#121b2a;color:#c6d2e1}.ff-result-local:hover{background:#19263a}
                 .ff-result-upload{border:1px solid #69cfff;background:linear-gradient(135deg,#45bdf5,#6e8cff);color:#05111d;box-shadow:0 8px 24px rgba(64,174,239,.2)}.ff-result-upload:hover{filter:brightness(1.08)}
-                .ff-ranked-intro{margin:0 0 20px;color:#a8b7ca;font-size:14px;line-height:1.55}.ff-ranked-field{display:grid;gap:8px}.ff-ranked-field label{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8297b3}.ff-ranked-field select{width:100%;min-height:46px;padding:0 13px;border:1px solid #344b68;border-radius:9px;background:#0d1522;color:#f4f8ff;font:700 14px Inter,Segoe UI,sans-serif}.ff-ranked-hint{margin-top:18px;color:#7f91a9;font-size:12px;line-height:1.5}.ff-ranked-error{margin-top:18px;padding:12px 14px;border-left:3px solid #f26b7a;border-radius:8px;background:#24171b;color:#efbec6;font-size:13px}.ff-ranked-badge{position:fixed;z-index:191;top:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:10px 15px;border:1px solid #275675;border-radius:999px;background:rgba(7,15,25,.9);box-shadow:0 10px 34px rgba(0,0,0,.35);color:#dff5ff;font:800 11px/1 Inter,Segoe UI,sans-serif;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}.ff-ranked-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:#ff5f70;box-shadow:0 0 14px #ff5f70}body.ff-ranked-active #player-controls,body.ff-ranked-active #v3-railzone [data-rail="advanced"],body.ff-ranked-active #v3-rail-pop-advanced{opacity:.3!important;pointer-events:none!important}
+                .ff-ranked-intro{margin:0 0 20px;color:#a8b7ca;font-size:14px;line-height:1.55}.ff-ranked-field{display:grid;gap:8px}.ff-ranked-field label{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8297b3}.ff-ranked-field select{width:100%;min-height:46px;padding:0 13px;border:1px solid #344b68;border-radius:9px;background:#0d1522;color:#f4f8ff;font:700 14px Inter,Segoe UI,sans-serif}.ff-ranked-hint{margin-top:18px;color:#7f91a9;font-size:12px;line-height:1.5}.ff-ranked-error{margin-top:18px;padding:12px 14px;border-left:3px solid #f26b7a;border-radius:8px;background:#24171b;color:#efbec6;font-size:13px}.ff-ranked-error button{display:block;margin-top:10px;min-height:34px;padding:0 12px;border:1px solid #3c6f91;border-radius:7px;background:#16314a;color:#dff5ff;font:700 12px Inter,Segoe UI,sans-serif;cursor:pointer}.ff-ranked-error button:hover{background:#1d4263}.ff-ranked-badge{position:fixed;z-index:191;top:22px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:10px 15px;border:1px solid #275675;border-radius:999px;background:rgba(7,15,25,.9);box-shadow:0 10px 34px rgba(0,0,0,.35);color:#dff5ff;font:800 11px/1 Inter,Segoe UI,sans-serif;letter-spacing:.12em;text-transform:uppercase;pointer-events:none}.ff-ranked-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:#ff5f70;box-shadow:0 0 14px #ff5f70}body.ff-ranked-active #player-controls,body.ff-ranked-active #v3-railzone [data-rail="advanced"],body.ff-ranked-active #v3-rail-pop-advanced{opacity:.3!important;pointer-events:none!important}
                 @media(max-width:560px){.ff-result-hero{grid-template-columns:82px 1fr;gap:16px}.ff-result-grade{height:82px}.ff-result-grade strong{font-size:38px}.ff-result-score strong{font-size:34px}.ff-result-stats{grid-template-columns:repeat(2,1fr)}.ff-result-stat:nth-child(2){border-right:0}.ff-result-stat:nth-child(-n+2){border-bottom:1px solid rgba(117,151,190,.17)}}
             `;
             document.head.appendChild(style);
@@ -207,10 +208,11 @@
         releaseHeldAutoplay();
     };
 
-    const showSetupError = message => {
+    const showSetupError = (message, offerNoteDetect = false) => {
         if (!setupDialog) return;
         const error = setupDialog.querySelector('[data-setup-error]');
-        error.textContent = message;
+        error.querySelector('[data-setup-error-message]').textContent = message;
+        error.querySelector('[data-install-notedetect]').hidden = !offerNoteDetect;
         error.hidden = false;
         setupDialog.querySelector('[data-start-ranked]').disabled = false;
     };
@@ -241,9 +243,14 @@
         }
         let d = diagnostic();
         const c = chart();
-        if (d?.plugin_version !== '1.32.0') {
+        if (!d?.plugin_version) {
             mode = 'choosing';
-            showSetupError('Ranked play requires Note Detection 1.32.0.');
+            showSetupError('Note Detection is required for ranked play but is not installed or active.', true);
+            return;
+        }
+        if (d.plugin_version !== '1.32.0') {
+            mode = 'choosing';
+            showSetupError(`Ranked play supports Note Detection 1.32.0. Installed: ${d.plugin_version}.`, true);
             return;
         }
         const previousSettings = d.settings;
@@ -305,7 +312,7 @@
                     <div class="ff-result-song" id="ff-ranked-title">Record a ranked score?</div>
                     <p class="ff-ranked-intro">Choose the arrangement before playback. Ranked mode uses one consistent, forgiving detection profile, locks playback controls, and records one uninterrupted run. Your practice settings return afterward.</p>
                     <div class="ff-ranked-field"><label for="ff-ranked-arrangement">Arrangement</label><select id="ff-ranked-arrangement" data-arrangement></select></div>
-                    <div class="ff-ranked-error" data-setup-error hidden></div>
+                    <div class="ff-ranked-error" data-setup-error hidden><span data-setup-error-message></span><button type="button" data-install-notedetect hidden>Install / update Note Detection</button></div>
                     <div class="ff-ranked-hint">Practice mode leaves every FeedBack control available.</div>
                 </div>
                 <footer class="ff-result-actions"><button class="ff-result-local" type="button" data-practice>Play normally</button><button class="ff-result-upload" type="button" data-start-ranked>Start ranked run</button></footer>
@@ -314,6 +321,29 @@
         options.forEach(option => select.add(new Option(option.label, option.value)));
         select.value = String(song.arrangementIndex ?? hostArrangement?.value ?? options[0].value);
         const start = setupDialog.querySelector('[data-start-ranked]');
+        const installNoteDetect = setupDialog.querySelector('[data-install-notedetect]');
+        installNoteDetect.addEventListener('click', async () => {
+            installNoteDetect.disabled = true;
+            installNoteDetect.textContent = 'Installing...';
+            const message = setupDialog.querySelector('[data-setup-error-message]');
+            try {
+                const plugins = window.feedBackDesktop?.plugins;
+                if (!plugins) {
+                    await navigator.clipboard.writeText(noteDetectUrl);
+                    message.textContent = 'Install link copied. Paste it into Plugin Manager, then restart FeedBack.';
+                    return;
+                }
+                const installed = await plugins.listInstalled();
+                const existing = installed.find(plugin => plugin.manifest?.id === 'note_detect');
+                const result = existing ? await plugins.update(existing.name) : await plugins.install(noteDetectUrl);
+                message.textContent = result.message;
+            } catch (error) {
+                message.textContent = `Note Detection could not be installed: ${error?.message || error}`;
+            } finally {
+                installNoteDetect.disabled = false;
+                installNoteDetect.textContent = 'Install / update Note Detection';
+            }
+        });
         start.addEventListener('click', () => {
             start.disabled = true;
             setupDialog.querySelector('[data-setup-error]').hidden = true;

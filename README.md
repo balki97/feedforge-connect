@@ -11,3 +11,5 @@ It links a FeedForge Hub account, validates eligible charts, records ranked Note
 Paste `https://github.com/balki97/feedforge-connect.git` into FeedBack's Plugin Manager.
 
 Create an account at [feedforge.org](https://feedforge.org), then open FeedForge Connect in FeedBack and authenticate the plugin with your FeedForge Hub account.
+
+Ranked play requires [Note Detection](https://github.com/got-feedback/feedBack-plugin-notedetect). Connect can install or update it from the ranked setup screen; restart FeedBack afterward.

@@ -42,6 +42,13 @@ class FeedPakPathTests(unittest.TestCase):
         self.assertIn("settings: finished.settings || {}", source)
         self.assertLess(source.index("/run/start"), source.index("on('song:play'"))
 
+    def test_missing_note_detection_has_an_install_path(self):
+        source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
+        self.assertIn("if (!d?.plugin_version)", source)
+        self.assertIn("https://github.com/got-feedback/feedBack-plugin-notedetect.git", source)
+        self.assertIn("plugins.install(noteDetectUrl)", source)
+        self.assertIn("restart FeedBack", source)
+
     def test_ranked_run_locks_competitive_controls_only(self):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
         self.assertIn("body.ff-ranked-active #player-controls", source)
