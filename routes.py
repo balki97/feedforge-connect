@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 PLUGIN_ID = "feedforge_connect"
 DEFAULT_HUB_URL = "https://feedforge.org"
 MAX_QUEUE = 50
-PLUGIN_VERSION = "0.4.5"
+PLUGIN_VERSION = "0.4.6"
 
 
 class HubError(Exception):
@@ -41,13 +41,23 @@ def _safe_hub_url() -> str:
 
 def _resolve_feedpak(dlc_root: Path, filename: str) -> Path:
     root = dlc_root.resolve()
-    candidate = (root / unquote(str(filename or ""))).resolve()
+    loaded_name = unquote(str(filename or ""))
+    if not loaded_name:
+        raise ValueError("FeedBack did not report which song file is loaded. Return to the library, reopen the FeedPak, and try again.")
+    candidate = (root / loaded_name).resolve()
     try:
         candidate.relative_to(root)
     except ValueError as exc:
         raise ValueError("Song path is outside the FeedBack library.") from exc
-    if candidate.suffix.lower() != ".feedpak" or not candidate.is_file():
-        raise ValueError("Ranked scores require an installed .feedpak file.")
+    if candidate.suffix.lower() != ".feedpak":
+        kind = candidate.suffix.lower() or "an unpacked chart"
+        raise ValueError(
+            f"This song was loaded from {kind}, not a FeedPak. Open the .feedpak version from your FeedBack library to play ranked."
+        )
+    if not candidate.is_file():
+        raise ValueError(
+            f"FeedBack cannot find '{candidate.name}' in the library anymore. Rescan the library or reinstall this FeedPak, then reopen it."
+        )
     return candidate
 
 

@@ -17,10 +17,14 @@ class FeedPakPathTests(unittest.TestCase):
             chart.parent.mkdir()
             chart.write_bytes(b"feedpak")
             self.assertEqual(_resolve_feedpak(root, "artist/song.feedpak"), chart.resolve())
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "outside the FeedBack library"):
                 _resolve_feedpak(root, "../song.feedpak")
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "loaded from \\.sloppak, not a FeedPak"):
                 _resolve_feedpak(root, "artist/song.sloppak")
+            with self.assertRaisesRegex(ValueError, "did not report which song file"):
+                _resolve_feedpak(root, "")
+            with self.assertRaisesRegex(ValueError, "cannot find 'missing.feedpak'"):
+                _resolve_feedpak(root, "artist/missing.feedpak")
 
     def test_score_upload_requires_player_confirmation(self):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
@@ -48,6 +52,7 @@ class FeedPakPathTests(unittest.TestCase):
         self.assertIn("https://github.com/got-feedback/feedBack-plugin-notedetect.git", source)
         self.assertIn("plugins.install(noteDetectUrl)", source)
         self.assertIn("restart FeedBack", source)
+        self.assertIn(".ff-ranked-error button[hidden]{display:none}", source)
 
     def test_ranked_run_locks_competitive_controls_only(self):
         source = Path(__file__).with_name("screen.js").read_text(encoding="utf-8")
