@@ -10,7 +10,11 @@
   <p>Link your FeedForge Hub account to submit eligible Note Detect scores. Ranked play also requires the Note Detection plugin; Connect offers to install it when missing. Ranked runs temporarily use the standard competitive detection profile, then restore your practice settings.</p>
   <div class="ff-row"><strong data-status>Checking connection…</strong><span data-queue></span></div>
   <div class="ff-row"><button type="button" data-connect>Connect account</button><button type="button" data-disconnect>Disconnect</button></div>
-  <p data-code hidden>Enter code <code></code> in the browser window.</p>
+  <div data-code hidden>
+    <p>Your code: <code></code> <button type="button" data-copy>Copy code</button></p>
+    <p><a data-open target="_blank" rel="noopener noreferrer">Open connection page</a></p>
+    <p>If the browser does not open, visit <a data-manual target="_blank" rel="noopener noreferrer">feedforge.org/connect/feedback</a> and enter the code. Keep this panel open until connected; reopening it resumes a pending connection.</p>
+  </div>
   <p class="ff-error" data-error></p>
   <script>
     (() => {
@@ -22,12 +26,38 @@
       const connect = root.querySelector('[data-connect]');
       const disconnect = root.querySelector('[data-disconnect]');
       let timer = null;
+      let generation = 0;
+      let deadline = 0;
 
       async function request(path, options) {
         const response = await fetch('/api/plugins/feedforge_connect/' + path, options);
         const body = await response.json();
-        if (!response.ok && response.status !== 428) throw new Error(body.errorDescription || body.error || 'Request failed.');
+        if (!response.ok && response.status !== 428) {
+          const failure = new Error(body.errorDescription || body.error || 'Request failed.');
+          failure.status = response.status;
+          throw failure;
+        }
         return { response, body };
+      }
+      function stop() {
+        generation++;
+        clearTimeout(timer);
+        connect.disabled = false;
+        connect.textContent = 'Connect account';
+      }
+      function showPending(body, openBrowser = false) {
+        stop();
+        const current = generation;
+        code.hidden = false;
+        code.querySelector('code').textContent = body.userCode;
+        code.querySelector('[data-open]').href = body.verificationUriComplete;
+        code.querySelector('[data-manual]').href = body.verificationUri;
+        code.querySelector('[data-manual]').textContent = body.verificationUri;
+        deadline = Date.now() + body.expiresIn * 1000;
+        status.textContent = 'Waiting for approval in your browser';
+        connect.textContent = 'Get a new code';
+        if (openBrowser) window.open(body.verificationUriComplete, '_blank', 'noopener,noreferrer');
+        timer = setTimeout(() => poll(body.interval || 5, current), (body.interval || 5) * 1000);
       }
       async function refresh() {
         try {
@@ -37,27 +67,57 @@
           queue.textContent = body.queued ? `${body.queued} score(s) waiting to retry` : '';
           disconnect.hidden = !body.connected;
           connect.hidden = body.connected;
+          if (!body.connected && body.pending) showPending(body.pending);
         } catch (e) { error.textContent = e.message; }
       }
-      async function poll(interval) {
+      async function poll(interval, current) {
+        if (!root.isConnected || current !== generation) return;
+        if (Date.now() >= deadline) {
+          stop(); code.hidden = true;
+          status.textContent = 'Connection code expired';
+          error.textContent = 'Click Connect account to get a new code.';
+          return;
+        }
         try {
           const { response } = await request('poll', { method:'POST' });
-          if (response.status === 428) { timer = setTimeout(() => poll(interval), interval * 1000); return; }
-          code.hidden = true; await refresh();
-        } catch (e) { error.textContent = e.message; }
+          if (!root.isConnected || current !== generation) return;
+          error.textContent = '';
+          if (response.status === 428) {
+            timer = setTimeout(() => poll(interval, current), interval * 1000);
+            return;
+          }
+          stop(); code.hidden = true; await refresh();
+        } catch (e) {
+          if (!root.isConnected || current !== generation) return;
+          error.textContent = e.message;
+          if (!e.status || e.status === 429 || e.status >= 500) {
+            error.textContent += ' Retrying automatically…';
+            timer = setTimeout(() => poll(interval, current), Math.max(interval, 10) * 1000);
+          } else {
+            stop(); code.hidden = true; status.textContent = 'Connection not completed';
+          }
+        }
       }
       connect.addEventListener('click', async () => {
+        stop();
+        const current = generation;
+        connect.disabled = true;
         error.textContent = '';
         try {
           const { body } = await request('begin', { method:'POST' });
-          code.hidden = false; code.querySelector('code').textContent = body.userCode;
-          window.open(body.verificationUriComplete, '_blank', 'noopener');
-          poll(body.interval || 5);
+          if (current === generation && root.isConnected) showPending(body, true);
         } catch (e) { error.textContent = e.message; }
+        finally { connect.disabled = false; }
+      });
+      code.querySelector('[data-copy]').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(code.querySelector('code').textContent); }
+        catch { error.textContent = 'Copy the displayed code manually.'; }
       });
       disconnect.addEventListener('click', async () => {
         if (!confirm('Disconnect FeedForge Hub from this FeedBack installation?')) return;
-        clearTimeout(timer); await request('disconnect', { method:'POST' }); await refresh();
+        stop();
+        try { await request('disconnect', { method:'POST' }); code.hidden = true; await refresh(); }
+        catch (e) { error.textContent = e.message; }
       });
       refresh();
     })();

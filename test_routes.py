@@ -2,11 +2,16 @@ import tempfile
 import unittest
 import json
 import zipfile
+import io
+import os
+from unittest.mock import patch
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pathlib import Path
 
 import yaml
 
-from routes import _chart_fingerprint, _resolve_feedpak
+from routes import _chart_fingerprint, _resolve_feedpak, setup
 
 
 class FeedPakPathTests(unittest.TestCase):
@@ -85,6 +90,38 @@ class FeedPakPathTests(unittest.TestCase):
             self.assertEqual(_chart_fingerprint(path, 0), original)
             write({**chart, "notes": [{"time": 1.25, "fret": 0}]})
             self.assertNotEqual(_chart_fingerprint(path, 0), original)
+
+
+class ConnectionTests(unittest.TestCase):
+    def test_internal_server_url_is_never_opened_and_pending_connection_resumes(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {"FEEDFORGE_HUB_URL": "https://feedforge.org"}):
+            app = FastAPI()
+            setup(app, {"config_dir": directory})
+            client = TestClient(app)
+            remote = {"ok": True, "deviceCode": "private-device-code", "userCode": "ABCD-1234", "expiresIn": 600, "interval": 5,
+                      "verificationUri": "http://0.0.0.0:3000/connect/feedback", "verificationUriComplete": "https://untrusted.example/?code=ABCD-1234"}
+            with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(json.dumps(remote).encode())):
+                begun = client.post("/api/plugins/feedforge_connect/begin")
+            self.assertEqual(begun.status_code, 200)
+            result = begun.json()
+            self.assertNotIn("deviceCode", result)
+            self.assertEqual(result["verificationUriComplete"], "https://feedforge.org/connect/feedback?code=ABCD-1234")
+            pending = client.get("/api/plugins/feedforge_connect/status").json()["pending"]
+            self.assertEqual(pending["userCode"], "ABCD-1234")
+            self.assertNotIn("deviceCode", pending)
+            self.assertGreater(pending["expiresIn"], 590)
+            from routes import HubError
+            with patch("routes.urllib.request.urlopen", side_effect=HubError(428, {"error": "authorization_pending"})):
+                self.assertEqual(client.post("/api/plugins/feedforge_connect/poll").status_code, 428)
+            with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"accessToken":"test-token"}')):
+                self.assertTrue(client.post("/api/plugins/feedforge_connect/poll").json()["connected"])
+            status = client.get("/api/plugins/feedforge_connect/status").json()
+            self.assertTrue(status["connected"])
+            self.assertIsNone(status["pending"])
+            self.assertNotIn("test-token", json.dumps(status))
+            with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"ok":true}')):
+                client.post("/api/plugins/feedforge_connect/disconnect")
+            self.assertFalse(client.get("/api/plugins/feedforge_connect/status").json()["connected"])
 
 
 if __name__ == "__main__":

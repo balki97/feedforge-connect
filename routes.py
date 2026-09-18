@@ -8,11 +8,12 @@ import logging
 import os
 import struct
 import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlencode, urlparse
 
 import yaml
 from fastapi import APIRouter, Request
@@ -21,7 +22,7 @@ from fastapi.responses import JSONResponse
 PLUGIN_ID = "feedforge_connect"
 DEFAULT_HUB_URL = "https://feedforge.org"
 MAX_QUEUE = 50
-PLUGIN_VERSION = "0.4.6"
+PLUGIN_VERSION = "0.4.7"
 
 
 class HubError(Exception):
@@ -37,6 +38,11 @@ def _safe_hub_url() -> str:
     if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}):
         return value
     return DEFAULT_HUB_URL
+
+
+def _connection_links(user_code: str) -> dict:
+    verification = _safe_hub_url() + "/connect/feedback"
+    return {"verificationUri": verification, "verificationUriComplete": verification + "?" + urlencode({"code": user_code})}
 
 
 def _resolve_feedpak(dlc_root: Path, filename: str) -> Path:
@@ -223,7 +229,10 @@ def setup(app, context):
     @router.get("/status")
     def status():
         current = config()
-        return {"ok": True, "connected": bool(_unprotect_token(current)), "hubUrl": _safe_hub_url(), "queued": len(queued())}
+        pending = None
+        if current.get("pendingDeviceCode") and current.get("pendingExpiresAt", 0) > time.time():
+            pending = {"userCode": current["pendingUserCode"], "expiresIn": int(current["pendingExpiresAt"] - time.time()), "interval": 5, **_connection_links(current["pendingUserCode"])}
+        return {"ok": True, "connected": bool(_unprotect_token(current)), "hubUrl": _safe_hub_url(), "queued": len(queued()), "pending": pending}
 
     @router.post("/begin")
     def begin():
@@ -233,8 +242,8 @@ def setup(app, context):
             return JSONResponse(exc.payload, status_code=exc.status)
         except urllib.error.URLError:
             return JSONResponse({"ok": False, "error": "FeedForge Hub is unavailable."}, status_code=503)
-        update_config({"pendingDeviceCode": result["deviceCode"]})
-        return result
+        update_config({"pendingDeviceCode": result["deviceCode"], "pendingUserCode": result["userCode"], "pendingExpiresAt": time.time() + result["expiresIn"]})
+        return {key: value for key, value in {**result, **_connection_links(result["userCode"])}.items() if key != "deviceCode"}
 
     @router.post("/poll")
     def poll():
@@ -248,7 +257,14 @@ def setup(app, context):
             return JSONResponse(exc.payload, status_code=exc.status)
         except urllib.error.URLError:
             return JSONResponse({"ok": False, "error": "FeedForge Hub is unavailable."}, status_code=503)
-        update_config(_protect_token(result["accessToken"]), remove=("pendingDeviceCode", "token", "tokenProtected"))
+        with lock:
+            current = config()
+            if current.get("pendingDeviceCode") != device_code:
+                return JSONResponse({"ok": False, "error": "This connection was replaced. Use the newest code."}, status_code=409)
+            for key in ("pendingDeviceCode", "pendingUserCode", "pendingExpiresAt", "token", "tokenProtected"):
+                current.pop(key, None)
+            current.update(_protect_token(result["accessToken"]))
+            write_json(config_file, current)
         return {"ok": True, "connected": True}
 
     @router.post("/disconnect")
@@ -259,7 +275,7 @@ def setup(app, context):
                 hub("/api/v1/auth/token", "DELETE", token=token)
             except (HubError, urllib.error.URLError):
                 pass
-        update_config({}, remove=("pendingDeviceCode", "token", "tokenProtected"))
+        update_config({}, remove=("pendingDeviceCode", "pendingUserCode", "pendingExpiresAt", "token", "tokenProtected"))
         return {"ok": True}
 
     @router.post("/submit")
