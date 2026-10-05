@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('settings.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 const tick = () => new Promise(resolve => setImmediate(resolve));
-async function scenario(pending = null) {
+async function scenario(pending = null, connection = {}) {
   const nodes = new Map();
   const node = key => {
     if (!nodes.has(key)) nodes.set(key,{textContent:'',hidden:false,disabled:false,href:'',handlers:{},addEventListener(name,fn){this.handlers[name]=fn;},querySelector:node});
@@ -16,12 +16,25 @@ async function scenario(pending = null) {
   const context={document:{currentScript:{closest:()=>root}},window:{open:url=>opened.push(url)},navigator:{clipboard:{writeText:async()=>{}}},confirm:()=>true,
     Date:{now:()=>now},setTimeout:fn=>{timers.set(++counter,fn);return counter;},clearTimeout:id=>timers.delete(id),
     fetch:async url=>{calls.push(url);const path=url.split('/').pop();const status=path==='poll'?responseStatus:200;
-      return {ok:status<400,status,json:async()=>path==='status'?{connected:false,queued:0,pending}:path==='begin'?details:status===503?{error:'Unavailable'}:{}};}};
+      return {ok:status<400,status,json:async()=>path==='status'?{connected:false,queued:0,pending,...connection}:path==='begin'?details:status===503?{error:'Unavailable'}:{}};}};
   vm.runInNewContext(source,context); await tick();
   const runTimer=async()=>{const [id,fn]=timers.entries().next().value;timers.delete(id);await fn();await tick();};
   return {node,root,timers,opened,calls,runTimer,setStatus:value=>responseStatus=value,expire:()=>now=700000};
 }
 (async()=>{
+  for (const connectionState of ['reconnect','unavailable']) {
+    const connection={connectionState,hasToken:true,message:'Account verification failed'};
+    const checked=await scenario(null,connection);
+    assert.match(checked.node('[data-status]').textContent,connectionState==='reconnect'?/Reconnect/:/could not be verified/);
+    assert.equal(checked.node('[data-error]').textContent,connection.message);
+    assert.equal(checked.node('[data-disconnect]').hidden,false);
+    connection.connected=true; connection.message='';
+    await checked.node('[data-check]').handlers.click();
+    assert.equal(checked.node('[data-status]').textContent,'Connected to FeedForge Hub');
+    assert.equal(checked.node('[data-error]').textContent,'');
+    assert.equal(checked.node('[data-check]').disabled,false);
+    assert.equal(checked.calls.some(url=>url.endsWith('/begin')),false);
+  }
   let s=await scenario();
   await s.node('[data-connect]').handlers.click();
   assert.deepEqual(s.opened,['https://feedforge.org/connect/feedback?code=ABCD-1234']);

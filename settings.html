@@ -9,7 +9,8 @@
   <h3>FeedForge Connect</h3>
   <p>Link your FeedForge Hub account to submit eligible Note Detect scores. Ranked play also requires the Note Detection plugin; Connect offers to install it when missing. Ranked runs temporarily use the standard competitive detection profile, then restore your practice settings.</p>
   <div class="ff-row"><strong data-status>Checking connection…</strong><span data-queue></span></div>
-  <div class="ff-row"><button type="button" data-connect>Connect account</button><button type="button" data-disconnect>Disconnect</button></div>
+  <div class="ff-row"><button type="button" data-connect>Connect account</button><button type="button" data-check>Check connection</button><button type="button" data-disconnect>Disconnect</button></div>
+  <p>FeedForge allows two connected apps per account. Connecting another app when both slots are used disconnects the oldest key, which may belong to Remote Library.</p>
   <div data-code hidden>
     <p>Your code: <code></code> <button type="button" data-copy>Copy code</button></p>
     <p><a data-open target="_blank" rel="noopener noreferrer">Open connection page</a></p>
@@ -25,6 +26,7 @@
       const code = root.querySelector('[data-code]');
       const connect = root.querySelector('[data-connect]');
       const disconnect = root.querySelector('[data-disconnect]');
+      const check = root.querySelector('[data-check]');
       let timer = null;
       let generation = 0;
       let deadline = 0;
@@ -60,15 +62,18 @@
         timer = setTimeout(() => poll(body.interval || 5, current), (body.interval || 5) * 1000);
       }
       async function refresh() {
+        check.disabled = true;
         try {
           const { body } = await request('status');
-          status.textContent = body.connected ? 'Connected to FeedForge Hub' : 'Not connected';
+          status.textContent = body.connected ? 'Connected to FeedForge Hub' : body.connectionState === 'unavailable' ? 'Connection could not be verified' : body.connectionState === 'reconnect' ? 'Reconnect your account' : 'Not connected';
+          error.textContent = body.message || '';
           status.className = body.connected ? 'ff-ok' : '';
           queue.textContent = body.queued ? `${body.queued} score(s) waiting to retry` : '';
-          disconnect.hidden = !body.connected;
+          disconnect.hidden = !(body.hasToken || body.connected);
           connect.hidden = body.connected;
           if (!body.connected && body.pending) showPending(body.pending);
         } catch (e) { error.textContent = e.message; }
+        finally { check.disabled = false; }
       }
       async function poll(interval, current) {
         if (!root.isConnected || current !== generation) return;
@@ -109,6 +114,7 @@
         } catch (e) { error.textContent = e.message; }
         finally { connect.disabled = false; }
       });
+      check.addEventListener('click', refresh);
       code.querySelector('[data-copy]').addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(code.querySelector('code').textContent); }
         catch { error.textContent = 'Copy the displayed code manually.'; }

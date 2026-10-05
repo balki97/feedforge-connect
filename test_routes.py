@@ -115,13 +115,43 @@ class ConnectionTests(unittest.TestCase):
                 self.assertEqual(client.post("/api/plugins/feedforge_connect/poll").status_code, 428)
             with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"accessToken":"test-token"}')):
                 self.assertTrue(client.post("/api/plugins/feedforge_connect/poll").json()["connected"])
-            status = client.get("/api/plugins/feedforge_connect/status").json()
+            with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"ok":true}')):
+                status = client.get("/api/plugins/feedforge_connect/status").json()
             self.assertTrue(status["connected"])
             self.assertIsNone(status["pending"])
             self.assertNotIn("test-token", json.dumps(status))
             with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"ok":true}')):
                 client.post("/api/plugins/feedforge_connect/disconnect")
             self.assertFalse(client.get("/api/plugins/feedforge_connect/status").json()["connected"])
+
+    def test_saved_key_is_verified_and_preserved_on_auth_or_network_failure(self):
+        from routes import HubError
+        import urllib.error
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "feedforge_connect.json"
+            path.write_text(json.dumps({"token": "saved-key"}))
+            app = FastAPI()
+            setup(app, {"config_dir": directory})
+            client = TestClient(app)
+            for failure, state in [(HubError(401, {"error": "Reconnect"}), "reconnect"),
+                                   (urllib.error.HTTPError("https://feedforge.org/api/v1/me", 401, "Unauthorized", {}, io.BytesIO(b'{"error":"Invalid token"}')), "reconnect"),
+                                   (TimeoutError(), "unavailable"),
+                                   (urllib.error.URLError("offline"), "unavailable")]:
+                with self.subTest(state=state), patch("routes.urllib.request.urlopen", side_effect=failure):
+                    result = client.get("/api/plugins/feedforge_connect/status").json()
+                self.assertFalse(result["connected"])
+                self.assertTrue(result["hasToken"])
+                self.assertEqual(result["connectionState"], state)
+                self.assertTrue(result["message"])
+                if isinstance(failure, urllib.error.HTTPError):
+                    self.assertIn("reconnect your account", result["message"])
+                self.assertNotIn("saved-key", json.dumps(result))
+                self.assertEqual(json.loads(path.read_text())["token"], "saved-key")
+            with patch("routes.urllib.request.urlopen", return_value=io.BytesIO(b'{"ok":true}')) as opened:
+                self.assertTrue(client.get("/api/plugins/feedforge_connect/status").json()["connected"])
+                request = opened.call_args.args[0]
+                self.assertTrue(request.full_url.endswith("/api/v1/me"))
+                self.assertEqual(request.get_header("Authorization"), "Bearer saved-key")
 
 
 if __name__ == "__main__":

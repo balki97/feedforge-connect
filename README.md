@@ -22,6 +22,10 @@ Ranked play requires [Note Detection](https://github.com/got-feedback/feedBack-p
 
 If the browser does not open, use **Open connection page**, or visit [feedforge.org/connect/feedback](https://feedforge.org/connect/feedback) and enter the displayed code. Codes expire after ten minutes. Reopening the settings panel resumes a pending connection; temporary network failures retry automatically. **Get a new code** starts over.
 
+### 0.4.8
+
+Connection status now verifies the saved key with FeedForge. Revoked or expired keys show a reconnect message; temporary network failures keep the key and can be retried with **Check connection**. FeedForge allows two active app keys; connecting a third app disconnects the oldest key.
+
 ### 0.4.7
 
 - Correct public approval links even when a server reports an internal Docker address.

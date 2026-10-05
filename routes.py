@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 PLUGIN_ID = "feedforge_connect"
 DEFAULT_HUB_URL = "https://feedforge.org"
 MAX_QUEUE = 50
-PLUGIN_VERSION = "0.4.7"
+PLUGIN_VERSION = "0.4.8"
 
 
 class HubError(Exception):
@@ -209,7 +209,11 @@ def setup(app, context):
                 payload = json.loads(exc.read().decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
                 payload = {"error": f"FeedForge returned HTTP {exc.code}."}
+            if exc.code == 401 and token:
+                payload = {"ok": False, "error": "Your FeedForge connection has expired or was disconnected. Open FeedForge Connect settings and reconnect your account."}
             raise HubError(exc.code, payload) from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as exc:
+            raise HubError(503, {"ok": False, "error": "FeedForge could not be reached. Check your connection and try again; your saved account key has been kept."}) from exc
 
     def queued() -> list:
         return read_json(queue_file, [])
@@ -229,10 +233,24 @@ def setup(app, context):
     @router.get("/status")
     def status():
         current = config()
+        token = _unprotect_token(current)
+        connected = False
+        connection_state = "disconnected"
+        message = ""
+        if token:
+            try:
+                result = hub("/api/v1/me", token=token)
+                if not result.get("ok"):
+                    raise HubError(503, {"error": "FeedForge could not verify your account. Try again."})
+                connected = True
+                connection_state = "connected"
+            except HubError as exc:
+                connection_state = "reconnect" if exc.status == 401 else "unavailable"
+                message = str(exc)
         pending = None
         if current.get("pendingDeviceCode") and current.get("pendingExpiresAt", 0) > time.time():
             pending = {"userCode": current["pendingUserCode"], "expiresIn": int(current["pendingExpiresAt"] - time.time()), "interval": 5, **_connection_links(current["pendingUserCode"])}
-        return {"ok": True, "connected": bool(_unprotect_token(current)), "hubUrl": _safe_hub_url(), "queued": len(queued()), "pending": pending}
+        return {"ok": True, "connected": connected, "hasToken": bool(token), "connectionState": connection_state, "message": message, "hubUrl": _safe_hub_url(), "queued": len(queued()), "pending": pending}
 
     @router.post("/begin")
     def begin():
