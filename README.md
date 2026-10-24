@@ -14,6 +14,10 @@ Create an account at [feedforge.org](https://feedforge.org), then open FeedForge
 
 Ranked play requires [Note Detection](https://github.com/got-feedback/feedBack-plugin-notedetect). Connect can install or update it from the ranked setup screen; restart FeedBack afterward.
 
+Requires FeedBack **0.3.0-alpha.1 or newer**, including stable 0.3.0 and later builds.
+The same plugin supports macOS, Windows and Linux; ranked play still requires Note Detection 1.32.0.
+No FeedBack reset or reinstall is needed for this compatibility update.
+
 ## Connecting your account
 
 1. Update FeedForge Connect in Plugin Manager and restart FeedBack.
@@ -21,6 +25,10 @@ Ranked play requires [Note Detection](https://github.com/got-feedback/feedBack-p
 3. Sign in at FeedForge and approve the connection. Keep the plugin settings open until it says **Connected to FeedForge Hub**.
 
 If the browser does not open, use **Open connection page**, or visit [feedforge.org/connect/feedback](https://feedforge.org/connect/feedback) and enter the displayed code. Codes expire after ten minutes. Reopening the settings panel resumes a pending connection; temporary network failures retry automatically. **Get a new code** starts over.
+
+### 0.4.9
+
+Allow installation on FeedBack 0.3.0-alpha.1 and newer. Previous releases incorrectly required stable 0.3.0, which excluded the alpha even though its playback APIs are available.
 
 ### 0.4.8
 

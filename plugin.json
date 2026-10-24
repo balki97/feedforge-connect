@@ -1,10 +1,10 @@
 {
   "id": "feedforge_connect",
   "name": "FeedForge Connect",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "Links FeedBack to FeedForge Hub and submits eligible Note Detect scores.",
   "private": false,
-  "minHost": "0.3.0",
+  "minHost": "0.3.0-alpha.1",
   "script": "screen.js",
   "settings": {
     "html": "settings.html",
